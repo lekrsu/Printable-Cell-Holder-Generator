@@ -56,23 +56,17 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
     adjusted = [(x - center_x, y - center_y) for x, y in positions]
 
     hole_diameter = 4.0
-    hole_offset = r + spacing / 2 + 0.5
+    hole_offset = r - spacing * 5
 
     rows = defaultdict(list)
-    cols = defaultdict(list)
     for x, y in adjusted:
         rows[int(y * 1000)].append((x, y))
-        cols[int(x * 1000)].append((x, y))
 
     top_y = max(rows)
     bottom_y = min(rows)
-    left_x = min(cols)
-    right_x = max(cols)
 
     top_holes = [((rows[top_y][i][0] + rows[top_y][i + 1][0]) / 2, rows[top_y][0][1] + hole_offset) for i in range(len(rows[top_y]) - 1)]
     bottom_holes = [((rows[bottom_y][i][0] + rows[bottom_y][i + 1][0]) / 2, rows[bottom_y][0][1] - hole_offset) for i in range(len(rows[bottom_y]) - 1)]
-    left_holes = [(cols[left_x][0][0] - hole_offset, (cols[left_x][i][1] + cols[left_x][i + 1][1]) / 2) for i in range(len(cols[left_x]) - 1)]
-    right_holes = [(cols[right_x][0][0] + hole_offset, (cols[right_x][i][1] + cols[right_x][i + 1][1]) / 2) for i in range(len(cols[right_x]) - 1)]
 
     width = max_x - min_x
     length = max_y - min_y
@@ -86,7 +80,7 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
     base = base.cut(cq.Workplane("XY").pushPoints(adjusted).circle(r).extrude(height))
 
     if bms_holes:
-        all_bms = top_holes + bottom_holes + left_holes + right_holes
+        all_bms = top_holes + bottom_holes
         base = base.cut(cq.Workplane("XY").pushPoints(all_bms).circle(hole_diameter / 2).extrude(height))
 
     base = base.cut(cq.Workplane("XY", origin=(0, 0, height)).pushPoints(adjusted).circle(terminal_diameter / 2).extrude(terminal_depth))
