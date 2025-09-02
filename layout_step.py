@@ -90,32 +90,26 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
         bms_holes_cut = cq.Workplane("XY").pushPoints(all_bms).circle(hole_diameter / 2).extrude(height)
         base = base.cut(bms_holes_cut)
 
+        # Fillet BOTH sides of the BMS holes in a single operation
         if fillet_bms and all_bms:
-            top_sel = None
-            bot_sel = None
+            all_edges_sel = None
             for x_pos, y_pos in all_bms:
                 s_top = cq.selectors.NearestToPointSelector((x_pos, y_pos, height)) & cq.selectors.RadiusNthSelector(0)
                 s_bot = cq.selectors.NearestToPointSelector((x_pos, y_pos, 0)) & cq.selectors.RadiusNthSelector(0)
-
-                if top_sel is None:
-                    top_sel = s_top
+                
+                # Combine both top and bottom selectors for this hole
+                hole_sel = s_top + s_bot
+                
+                if all_edges_sel is None:
+                    all_edges_sel = hole_sel
                 else:
-                    top_sel = top_sel + s_top
+                    all_edges_sel = all_edges_sel + hole_sel
 
-                if bot_sel is None:
-                    bot_sel = s_bot
-                else:
-                    bot_sel = bot_sel + s_bot
-
-            if top_sel is not None:
-                top_edges = base.edges(top_sel).vals()
-                if top_edges:
-                    base = base.edges(top_sel).fillet(bms_fillet_radius)
-
-            if bot_sel is not None:
-                bot_edges = base.edges(bot_sel).vals()
-                if bot_edges:
-                    base = base.edges(bot_sel).fillet(bms_fillet_radius)
+            # Apply fillets to all edges at once
+            if all_edges_sel is not None:
+                all_edges = base.edges(all_edges_sel).vals()
+                if all_edges:
+                    base = base.edges(all_edges_sel).fillet(bms_fillet_radius)
 
     base = base.cut(cq.Workplane("XY", origin=(0, 0, height)).pushPoints(adjusted).circle(terminal_diameter / 2).extrude(terminal_depth))
 
