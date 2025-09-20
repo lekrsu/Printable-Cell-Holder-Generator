@@ -41,7 +41,7 @@ def generate_vertical_honeycomb_layout(x_dim, y_dim, spacing, cell_size):
         col += 1
     return positions
 
-def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diameter=7.0, terminal_depth=1.0, cover_thickness=0.4, rounded_corners=False, bms_holes=True, ledge_width=1.0, fillet_bms=False, circle_hole_offset=False):
+def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diameter=7.0, terminal_depth=1.0, cover_thickness=0.4, rounded_corners=False, bms_holes=True, ledge_width=1.0, fillet_bms=False, circle_hole_offset=False, layout_type="grid"):
     if not positions:
         return None
 
@@ -57,26 +57,115 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
 
     hole_diameter = 4.0
     
-    if circle_hole_offset:
-        hole_offset = r + spacing - 2.3 - spacing  # circle offset
+    if layout_type == "vertical_honeycomb":
+        bms_fillet_radius = 1.5
     else:
-        hole_offset = r + spacing  # semicircle offset
+        bms_fillet_radius = 0.5
     
-    bms_fillet_radius = 0.5
+    if circle_hole_offset:
+        hole_offset = r + spacing - 2.3 - spacing
+    else:
+        hole_offset = r + spacing
+    
+    
+    if layout_type == "vertical_honeycomb":
+        hole_offset -= 3.0
 
     rows = defaultdict(list)
     for x, y in adjusted:
         rows[int(y * 1000)].append((x, y))
 
-    top_y = max(rows)
-    bottom_y = min(rows)
-
-    top_holes = [((rows[top_y][i][0] + rows[top_y][i + 1][0]) / 2, rows[top_y][0][1] + hole_offset) for i in range(len(rows[top_y]) - 1)]
-    bottom_holes = [((rows[bottom_y][i][0] + rows[bottom_y][i + 1][0]) / 2, rows[bottom_y][0][1] - hole_offset) for i in range(len(rows[bottom_y]) - 1)]
-
     width = max_x - min_x
     length = max_y - min_y
     corner_radius = 5.0
+
+    valid_bms_holes = []
+    if bms_holes:
+        if rounded_corners:
+            test_body = cq.Workplane("XY").rect(width, length).extrude(height).edges("|Z").fillet(corner_radius)
+        else:
+            test_body = cq.Workplane("XY").box(width, length, height, centered=(True, True, False))
+
+        potential_holes = []
+        x_step = cell_size + spacing
+        
+        top_y_key = max(rows)
+        bottom_y_key = min(rows)
+        
+        
+        if len(rows[top_y_key]) > 0:
+            top_row = rows[top_y_key]
+            y_pos = top_row[0][1] + hole_offset
+            potential_holes.append((top_row[0][0] - x_step / 2, y_pos))
+            for i in range(len(top_row) - 1):
+                potential_holes.append(((top_row[i][0] + top_row[i + 1][0]) / 2, y_pos))
+            potential_holes.append((top_row[-1][0] + x_step / 2, y_pos))
+
+        
+        if len(rows[bottom_y_key]) > 0:
+            bottom_row = rows[bottom_y_key]
+            y_pos = bottom_row[0][1] - hole_offset
+            potential_holes.append((bottom_row[0][0] - x_step / 2, y_pos))
+            for i in range(len(bottom_row) - 1):
+                potential_holes.append(((bottom_row[i][0] + bottom_row[i + 1][0]) / 2, y_pos))
+            potential_holes.append((bottom_row[-1][0] + x_step / 2, y_pos))
+
+        
+        if layout_type == "vertical_honeycomb":
+            adjusted_potential_holes = []
+            
+            
+            holes_by_row = defaultdict(list)
+            for hole_x, hole_y in potential_holes:
+                holes_by_row[hole_y].append(hole_x)
+            
+            
+            for y_pos in holes_by_row:
+                holes_by_row[y_pos].sort()
+            
+            for hole_x, hole_y in potential_holes:
+                new_hole_x = hole_x
+                
+                
+                row_holes = holes_by_row[hole_y]
+                
+                
+                is_leftmost = hole_x == min(row_holes)
+                is_rightmost = hole_x == max(row_holes)
+                
+                if is_leftmost:
+                    
+                    
+                    has_cell_to_left = any(cx < hole_x - x_step/4 
+                                         for cx, cy in adjusted 
+                                         if abs(cy - hole_y) < (cell_size + spacing)/2)
+                    if not has_cell_to_left:
+                        
+                        adjustment = x_step / 2 * 0.5
+                        new_hole_x = hole_x - adjustment
+                
+                elif is_rightmost:
+                    
+                    
+                    has_cell_to_right = any(cx > hole_x + x_step/4 
+                                          for cx, cy in adjusted 
+                                          if abs(cy - hole_y) < (cell_size + spacing)/2)
+                    if not has_cell_to_right:
+                        
+                        adjustment = x_step / 2 * 0.5
+                        new_hole_x = hole_x + adjustment
+                
+                adjusted_potential_holes.append((new_hole_x, hole_y))
+            
+            potential_holes = adjusted_potential_holes
+
+        test_pin_volume = (np.pi * (hole_diameter / 2)**2) * height
+        for x, y in potential_holes:
+            test_pin = cq.Workplane("XY").pushPoints([(x, y)]).circle(hole_diameter / 2).extrude(height)
+            intersection = test_body.intersect(test_pin)
+            
+            if intersection.val() and intersection.val().Volume() >= (test_pin_volume * 0.49):
+                valid_bms_holes.append((x, y))
 
     if rounded_corners:
         base = cq.Workplane("XY").rect(width, length).extrude(height).edges("|Z").fillet(corner_radius)
@@ -85,35 +174,26 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
 
     base = base.cut(cq.Workplane("XY").pushPoints(adjusted).circle(r).extrude(height))
 
-    if bms_holes:
-        all_bms = top_holes + bottom_holes
-        bms_holes_cut = cq.Workplane("XY").pushPoints(all_bms).circle(hole_diameter / 2).extrude(height)
+    if valid_bms_holes:
+        unique_valid_holes = sorted(list(set(valid_bms_holes)))
+        bms_holes_cut = cq.Workplane("XY").pushPoints(unique_valid_holes).circle(hole_diameter / 2).extrude(height)
         base = base.cut(bms_holes_cut)
 
-        # Fillet BOTH sides of the BMS holes in a single operation
-        if fillet_bms and all_bms:
+        if fillet_bms:
             all_edges_sel = None
-            for x_pos, y_pos in all_bms:
+            for x_pos, y_pos in unique_valid_holes:
                 s_top = cq.selectors.NearestToPointSelector((x_pos, y_pos, height)) & cq.selectors.RadiusNthSelector(0)
                 s_bot = cq.selectors.NearestToPointSelector((x_pos, y_pos, 0)) & cq.selectors.RadiusNthSelector(0)
-                
-                # Combine both top and bottom selectors for this hole
                 hole_sel = s_top + s_bot
-                
-                if all_edges_sel is None:
-                    all_edges_sel = hole_sel
-                else:
-                    all_edges_sel = all_edges_sel + hole_sel
-
-            # Apply fillets to all edges at once
-            if all_edges_sel is not None:
-                all_edges = base.edges(all_edges_sel).vals()
-                if all_edges:
-                    base = base.edges(all_edges_sel).fillet(bms_fillet_radius)
+                if all_edges_sel is None: all_edges_sel = hole_sel
+                else: all_edges_sel = all_edges_sel + hole_sel
+            
+            if all_edges_sel is not None and base.edges(all_edges_sel).vals():
+                base = base.edges(all_edges_sel).fillet(bms_fillet_radius)
 
     base = base.cut(cq.Workplane("XY", origin=(0, 0, height)).pushPoints(adjusted).circle(terminal_diameter / 2).extrude(terminal_depth))
-
     rings = cq.Workplane("XY", origin=(0, 0, cover_thickness)).pushPoints(adjusted).circle(r).circle(r - ledge_width).extrude(-cover_thickness)
+    
     return base.union(rings, glue=True)
 
 def save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_honeycomb_positions, cell_size, spacing, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms=False, circle_hole_offset=False):
@@ -122,13 +202,13 @@ def save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_hone
     terminal_depth = 1.0
 
     layouts = [
-        (grid_positions, "grid_layout.step", "Grid Layout"),
-        (honeycomb_positions, "honeycomb_layout.step", "Honeycomb Layout"),
-        (vertical_honeycomb_positions, "vertical_honeycomb_layout.step", "Vertical Honeycomb Layout")
+        (grid_positions, "grid_layout.step", "Grid Layout", "grid"),
+        (honeycomb_positions, "honeycomb_layout.step", "Honeycomb Layout", "honeycomb"),
+        (vertical_honeycomb_positions, "vertical_honeycomb_layout.step", "Vertical Honeycomb Layout", "vertical_honeycomb")
     ]
 
-    for positions, filename, layout_name in layouts:
-        model = create_3d_model(positions, cell_size, spacing, height, terminal_diameter, terminal_depth, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms, circle_hole_offset)
+    for positions, filename, layout_name, layout_type in layouts:
+        model = create_3d_model(positions, cell_size, spacing, height, terminal_diameter, terminal_depth, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms, circle_hole_offset, layout_type)
         if model:
             cq.exporters.export(model.val(), filename, exportType='STEP', opt={"schema": "AP214"})
             hole_type = "circle" if circle_hole_offset else "semicircle"
