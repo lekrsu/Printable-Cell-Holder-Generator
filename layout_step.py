@@ -41,7 +41,7 @@ def generate_vertical_honeycomb_layout(x_dim, y_dim, spacing, cell_size):
         col += 1
     return positions
 
-def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diameter=7.0, terminal_depth=1.0, cover_thickness=0.4, rounded_corners=False, bms_holes=True, ledge_width=1.0, fillet_bms=False, circle_hole_offset=False, layout_type="grid"):
+def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diameter=7.0, terminal_depth=1.0, cover_thickness=0.4, rounded_corners=False, bms_holes=True, ledge_width=1.0, fillet_bms=False, layout_type=0):
     if not positions:
         return None
 
@@ -57,19 +57,15 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
 
     hole_diameter = 4.0
     
-    if layout_type == "vertical_honeycomb":
+    if layout_type == 2:
         bms_fillet_radius = 1.5
     else:
         bms_fillet_radius = 0.5
     
-    if circle_hole_offset:
-        hole_offset = r + spacing - 2.3 - spacing
-    else:
-        hole_offset = r + spacing
+    hole_offset = r + spacing - 2.3 - spacing
     
-    
-    if layout_type == "vertical_honeycomb":
-        hole_offset -= 3.0
+    if layout_type == 2:
+        hole_offset -= 2.25
 
     rows = defaultdict(list)
     for x, y in adjusted:
@@ -92,7 +88,6 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
         top_y_key = max(rows)
         bottom_y_key = min(rows)
         
-        
         if len(rows[top_y_key]) > 0:
             top_row = rows[top_y_key]
             y_pos = top_row[0][1] + hole_offset
@@ -101,7 +96,6 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
                 potential_holes.append(((top_row[i][0] + top_row[i + 1][0]) / 2, y_pos))
             potential_holes.append((top_row[-1][0] + x_step / 2, y_pos))
 
-        
         if len(rows[bottom_y_key]) > 0:
             bottom_row = rows[bottom_y_key]
             y_pos = bottom_row[0][1] - hole_offset
@@ -110,15 +104,12 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
                 potential_holes.append(((bottom_row[i][0] + bottom_row[i + 1][0]) / 2, y_pos))
             potential_holes.append((bottom_row[-1][0] + x_step / 2, y_pos))
 
-        
-        if layout_type == "vertical_honeycomb":
+        if layout_type == 2:
             adjusted_potential_holes = []
-            
             
             holes_by_row = defaultdict(list)
             for hole_x, hole_y in potential_holes:
                 holes_by_row[hole_y].append(hole_x)
-            
             
             for y_pos in holes_by_row:
                 holes_by_row[y_pos].sort()
@@ -126,32 +117,24 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
             for hole_x, hole_y in potential_holes:
                 new_hole_x = hole_x
                 
-                
                 row_holes = holes_by_row[hole_y]
-                
                 
                 is_leftmost = hole_x == min(row_holes)
                 is_rightmost = hole_x == max(row_holes)
                 
                 if is_leftmost:
-                    
-                    
                     has_cell_to_left = any(cx < hole_x - x_step/4 
                                          for cx, cy in adjusted 
                                          if abs(cy - hole_y) < (cell_size + spacing)/2)
                     if not has_cell_to_left:
-                        
                         adjustment = x_step / 2 * 0.5
                         new_hole_x = hole_x - adjustment
                 
                 elif is_rightmost:
-                    
-                    
                     has_cell_to_right = any(cx > hole_x + x_step/4 
                                           for cx, cy in adjusted 
                                           if abs(cy - hole_y) < (cell_size + spacing)/2)
                     if not has_cell_to_right:
-                        
                         adjustment = x_step / 2 * 0.5
                         new_hole_x = hole_x + adjustment
                 
@@ -196,32 +179,31 @@ def create_3d_model(positions, cell_size, spacing, height=10.0, terminal_diamete
     
     return base.union(rings, glue=True)
 
-def save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_honeycomb_positions, cell_size, spacing, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms=False, circle_hole_offset=False):
+def save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_honeycomb_positions, cell_size, spacing, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms=False):
     height = 10.0
     terminal_diameter = 7.0
     terminal_depth = 1.0
 
     layouts = [
-        (grid_positions, "grid_layout.step", "Grid Layout", "grid"),
-        (honeycomb_positions, "honeycomb_layout.step", "Honeycomb Layout", "honeycomb"),
-        (vertical_honeycomb_positions, "vertical_honeycomb_layout.step", "Vertical Honeycomb Layout", "vertical_honeycomb")
+        (grid_positions, "grid_layout.step", "Grid Layout", 0),
+        (honeycomb_positions, "honeycomb_layout.step", "Honeycomb Layout", 1),
+        (vertical_honeycomb_positions, "vertical_honeycomb_layout.step", "Vertical Honeycomb Layout", 2)
     ]
 
     for positions, filename, layout_name, layout_type in layouts:
-        model = create_3d_model(positions, cell_size, spacing, height, terminal_diameter, terminal_depth, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms, circle_hole_offset, layout_type)
+        model = create_3d_model(positions, cell_size, spacing, height, terminal_diameter, terminal_depth, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms, layout_type)
         if model:
             cq.exporters.export(model.val(), filename, exportType='STEP', opt={"schema": "AP214"})
-            hole_type = "circle" if circle_hole_offset else "semicircle"
             if fillet_bms:
-                print(f"Saved {layout_name} with filleted BMS holes ({hole_type} offset) to {filename} with {len(positions)} cells")
+                print(f"Saved {layout_name} with filleted BMS holes to {filename} with {len(positions)} cells")
             else:
-                print(f"Saved {layout_name} with {hole_type} hole offset to {filename} with {len(positions)} cells")
+                print(f"Saved {layout_name} to {filename} with {len(positions)} cells")
         else:
             print(f"No cells in {layout_name}, skipping export")
 
 def main():
-    if len(sys.argv) < 9 or len(sys.argv) > 11:
-        print("Usage: python3 layout_step.py <x_dim> <y_dim> <spacing> <cell_size> <cover_thickness> <rounded_corners[true/false]> <bms_holes[true/false]> <ledge_width> [fillet_bms[true/false]] [circle_hole_offset[true/false]]")
+    if len(sys.argv) < 9 or len(sys.argv) > 10:
+        print("Usage: python3 layout_step.py <x_dim> <y_dim> <spacing> <cell_size> <cover_thickness> <rounded_corners[true/false]> <bms_holes[true/false]> <ledge_width> [fillet_bms[true/false]]")
         sys.exit(1)
 
     x_dim = float(sys.argv[1])
@@ -234,12 +216,8 @@ def main():
     ledge_width = float(sys.argv[8])
     
     fillet_bms = False
-    if len(sys.argv) >= 10:
+    if len(sys.argv) == 10:
         fillet_bms = sys.argv[9].lower() == "true"
-    
-    circle_hole_offset = False
-    if len(sys.argv) == 11:
-        circle_hole_offset = sys.argv[10].lower() == "true"
 
     if cell_size <= 0:
         print("Cell size must be positive")
@@ -249,7 +227,7 @@ def main():
     honeycomb_positions = generate_honeycomb_layout(x_dim, y_dim, spacing, cell_size)
     vertical_honeycomb_positions = generate_vertical_honeycomb_layout(x_dim, y_dim, spacing, cell_size)
 
-    save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_honeycomb_positions, cell_size, spacing, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms, circle_hole_offset)
+    save_models(x_dim, y_dim, grid_positions, honeycomb_positions, vertical_honeycomb_positions, cell_size, spacing, cover_thickness, rounded_corners, bms_holes, ledge_width, fillet_bms)
 
 if __name__ == "__main__":
     main()
