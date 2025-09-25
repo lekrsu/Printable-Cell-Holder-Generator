@@ -16,6 +16,37 @@ python3 layout_step.py <x_dim> <y_dim> <spacing> <cell_size> <cover_thickness> <
 
 -----
 
+## Setup venv
+
+Before running the script, it is recommended to create a Python virtual environment and install the required dependencies.
+
+1. Create a venv:
+
+python3 -m venv venv
+
+2. Activate the venv:
+
+Linux/macOS:
+```bash
+source venv/bin/activate
+```
+
+Windows (PowerShell):
+```bash
+.\venv\Scripts\Activate.ps1
+```
+
+3. Install the dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+Note: If your Python version is above 3.12 and the installed cadquery version is below 2.5.2, the standard requirements.txt installation may fail. In that case, run:
+
+pip install git+https://github.com/CadQuery/cadquery.git
+
+-----
+
 ## Parameters
 
 The script accepts the following arguments in order:
