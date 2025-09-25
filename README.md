@@ -42,9 +42,9 @@ pip install -r requirements.txt
 ```
 
 Note: If your Python version is above 3.12 and the installed cadquery version is below 2.5.2, the standard requirements.txt installation may fail. In that case, run:
-
+```bash
 pip install git+https://github.com/CadQuery/cadquery.git
-
+```
 -----
 
 ## Parameters
