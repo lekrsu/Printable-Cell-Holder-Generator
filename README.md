@@ -53,14 +53,13 @@ The script accepts the following arguments in order:
 
 | Parameter | Description | Data Type |
 | :--- | :--- | :--- |
-| `x_dim` | Total width in mm. | `float` |
-| `y_dim` | Total height of the holder in mm. | `float` |
+| `x_dim, y_dim` | Total allowed width & length in mm. | `float` |
 | `spacing` | The minimum wall thickness between cell holes. (e.g., `0.43` for a 0.4mm nozzle). | `float` |
-| `cell_size` | The diameter of your battery cell, including any desired tolerance (e.g., `21.5-21.7` for a 21700 cell). | `float` |
-| `cover_thickness`| The thickness of the base plate of the holder. (`0.2-0.4` is normal) | `float` |
-| `rounded_corners`| Enables or disables rounded external corners on the holder. | `true` / `false` |
+| `cell_size` | The diameter of your battery cell, including any desired tolerance (e.g., `21.4-21.7` for a 21700 cell). | `float` |
+| `cover_thickness`| The thickness of the ledge_width. (`0.2-0.4` is normal) | `float` |
+| `rounded_corners`| Rounded external corners on the holder. | `true` / `false` |
 | `bms_holes` | Adds mounting holes for balancing. | `true` / `false` |
-| `ledge_width` | Ledge of cover in mm, `3.75` to mimic fishpaper. | `float` |
+| `ledge_width` | Cover ledge in mm, `3.75` to mimic fishpaper. | `float` |
 | `fillet_bms` | **(Optional, causes segmentation fault <18.5 cells)** Adds a fillet to the balancing holes. | `true` / `false` |
 
 -----
